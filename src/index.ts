@@ -56,6 +56,7 @@ server.tool(
     item: z.string().describe('Item title, e.g. "my-app-prod"'),
     category: z.enum(['login', 'api_credentials', 'secure_note']).optional().describe('Item category (default: login)'),
     fields: z.record(
+      z.string(),
       z.object({
         value: z.string().optional().describe('Field value; omit or leave empty to auto-generate'),
         concealed: z.boolean().optional().describe('Store as concealed/password field (auto-detected from field name if omitted)'),
