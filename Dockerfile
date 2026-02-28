@@ -22,5 +22,10 @@ COPY --from=builder /app/dist/ dist/
 # Runtime env vars (set at deploy time)
 ENV HERALD_URL="http://herald:8765"
 ENV HERALD_API_TOKEN=""
+ENV MCP_TRANSPORT="stdio"
+ENV MCP_HOST="0.0.0.0"
+ENV MCP_PORT="8000"
+
+EXPOSE 8000
 
 ENTRYPOINT ["node", "dist/index.js"]
