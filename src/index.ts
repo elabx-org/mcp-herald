@@ -48,5 +48,32 @@ server.tool('herald_rotate', 'Trigger secret rotation for a 1Password item ID (i
   }
 );
 
+server.tool(
+  'herald_provision_secret',
+  'Create a new secret item in a 1Password vault. Fields with empty values are auto-generated. Returns op:// refs for each field.',
+  {
+    vault: z.string().describe('Vault name, e.g. "HomeLab"'),
+    item: z.string().describe('Item title, e.g. "my-app-prod"'),
+    category: z.enum(['login', 'api_credentials', 'secure_note']).optional().describe('Item category (default: login)'),
+    fields: z.record(
+      z.object({
+        value: z.string().optional().describe('Field value; omit or leave empty to auto-generate'),
+        concealed: z.boolean().optional().describe('Store as concealed/password field (auto-detected from field name if omitted)'),
+      })
+    ).describe('Map of field names to their spec'),
+  },
+  async ({ vault, item, category, fields }) => {
+    const data = await client.provision({ vault, item, category, fields: fields as Record<string, { value?: string; concealed?: boolean }> });
+    const lines = [
+      `Created item "${item}" in vault "${vault}"`,
+      `Item ID: ${data.item_id}`,
+      '',
+      'op:// references (use these in extra.env):',
+      ...Object.entries(data.refs).map(([field, ref]) => `  ${field}=${ref}`),
+    ];
+    return { content: [{ type: 'text', text: lines.join('\n') }] };
+  }
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);

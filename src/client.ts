@@ -13,6 +13,12 @@ export interface InventoryResponse {
   }>;
 }
 
+export interface ProvisionResponse {
+  vault_id: string;
+  item_id: string;
+  refs: Record<string, string>;
+}
+
 export interface AuditResponse {
   entries: Array<{
     ts: string;
@@ -66,5 +72,17 @@ export class HeraldClient {
   }
   rotate(itemId: string) {
     return this.fetch(`/v1/rotate/${itemId}`, { method: 'POST' });
+  }
+
+  provision(params: {
+    vault: string;
+    item: string;
+    category?: string;
+    fields: Record<string, { value?: string; concealed?: boolean }>;
+  }) {
+    return this.fetch<ProvisionResponse>('/v1/provision', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
   }
 }
