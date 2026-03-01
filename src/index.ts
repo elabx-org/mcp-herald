@@ -36,10 +36,10 @@ function createMcpServer(): McpServer {
     }
   );
 
-  server.tool('herald_sync', 'Trigger manual secret sync for a stack',
-    { stack: z.string(), out_path: z.string().optional() },
-    async ({ stack, out_path }) => {
-      const data = await client.sync(stack, out_path);
+  server.tool('herald_sync', 'Resolve op:// secrets for a stack. env_content is the raw env file contents with op:// refs (e.g. "KEY=op://Vault/Item/field\\nKEY2=op://...").',
+    { stack: z.string(), env_content: z.string(), out_path: z.string().optional(), bypass_cache: z.boolean().optional() },
+    async ({ stack, env_content, out_path, bypass_cache }) => {
+      const data = await client.sync(stack, env_content, out_path, bypass_cache);
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
     }
   );

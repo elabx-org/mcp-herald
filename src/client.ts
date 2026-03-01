@@ -64,10 +64,10 @@ export class HeraldClient {
   rotateCache(stack: string) {
     return this.fetch(`/v1/cache/${stack}`, { method: 'DELETE' });
   }
-  sync(stack: string, outPath?: string) {
+  sync(stack: string, envContent?: string, outPath?: string, bypassCache?: boolean) {
     return this.fetch('/v1/materialize/env', {
       method: 'POST',
-      body: JSON.stringify({ stack, out_path: outPath }),
+      body: JSON.stringify({ stack, env_content: envContent ?? '', out_path: outPath, bypass_cache: bypassCache }),
     });
   }
   rotate(itemId: string) {
