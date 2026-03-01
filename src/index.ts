@@ -12,7 +12,25 @@ function createMcpServer(): McpServer {
 
   server.tool('herald_health', 'Check Herald service health and provider status', {}, async () => {
     const data = await client.health();
-    return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    const providerLines = data.providers.map(p => {
+      const typeLabel = p.type === 'connect_server' ? 'Connect (local, no rate limits)'
+        : p.type === 'service_account' ? 'Service Account (cloud API, rate-limited)'
+        : p.type ?? 'unknown';
+      const rateNote = p.rate_limited_since ? ` ⚠ rate-limited since ${p.rate_limited_since}` : '';
+      return `  ${p.name} [${typeLabel}] — ${p.status}${p.error ? `: ${p.error}` : ''}${rateNote}`;
+    });
+    const provisionerLabel = data.provisioner === 'connect' ? 'Connect (local REST API, no rate limits)'
+      : data.provisioner === 'sdk' ? 'SDK service account (cloud API, rate-limited)'
+      : 'unavailable';
+    const summary = [
+      `Status: ${data.status}`,
+      `Uptime: ${data.uptime_seconds}s`,
+      `Provisioner: ${provisionerLabel}`,
+      '',
+      'Read providers (priority order):',
+      ...providerLines,
+    ].join('\n');
+    return { content: [{ type: 'text', text: `${summary}\n\n${JSON.stringify(data, null, 2)}` }] };
   });
 
   server.tool('herald_inventory', 'Get full secret coverage map across all stacks', {}, async () => {
@@ -44,17 +62,30 @@ function createMcpServer(): McpServer {
     }
   );
 
-  server.tool('herald_rotate', 'Trigger secret rotation for a 1Password item ID (invalidates cache + redeploys affected stacks)',
+  server.tool('herald_rotate', 'Trigger cache invalidation + redeployment for stacks using a 1Password item. Does NOT change the secret value in 1Password — update the value there first, then call this.',
     { item_id: z.string() },
     async ({ item_id }) => {
-      const data = await client.rotate(item_id);
-      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+      const [health, data] = await Promise.all([
+        client.health(),
+        client.rotate(item_id),
+      ]);
+      const connectProvider = health.providers.find(p => p.type === 'connect_server' && p.status === 'ok');
+      const updateHint = connectProvider
+        ? `To update the secret value: use the 1Password Connect REST API (${connectProvider.name}) or the 1Password web UI, then run herald_rotate again.`
+        : `To update the secret value: use the 1Password web UI or CLI, then run herald_rotate again.`;
+      const lines = [
+        'Rotation triggered: cache invalidated and affected stacks redeployed.',
+        updateHint,
+        '',
+        JSON.stringify(data, null, 2),
+      ];
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
     }
   );
 
   server.tool(
     'herald_provision_secret',
-    'Create a new secret item in a 1Password vault. Fields with empty values are auto-generated. Returns op:// refs for each field.',
+    'Create or upsert a secret item in a 1Password vault. Fields with empty values are auto-generated. Returns op:// refs for each field. Note: if the item already exists, only MISSING fields are added — existing field values are never overwritten.',
     {
       vault: z.string().describe('Vault name, e.g. "HomeLab"'),
       item: z.string().describe('Item title, e.g. "my-app-prod"'),
@@ -68,13 +99,24 @@ function createMcpServer(): McpServer {
       ).describe('Map of field names to their spec'),
     },
     async ({ vault, item, category, fields }) => {
-      const data = await client.provision({ vault, item, category, fields: fields as Record<string, { value?: string; concealed?: boolean }> });
+      const [health, data] = await Promise.all([
+        client.health(),
+        client.provision({ vault, item, category, fields: fields as Record<string, { value?: string; concealed?: boolean }> }),
+      ]);
+      const provisioner = health.provisioner ?? 'unknown';
+      const provisionerNote = provisioner === 'connect'
+        ? 'Provisioned via Connect server (local REST API, no rate limits).\n⚠ Upsert limitation: if the item already existed, only new fields were added — existing field values were NOT updated. To update an existing field value, delete the item in 1Password and re-provision.'
+        : provisioner === 'sdk'
+        ? 'Provisioned via SDK service account (cloud API). Upsert limitation applies equally: existing field values are never overwritten.'
+        : `Provisioner: ${provisioner}`;
       const lines = [
-        `Created item "${item}" in vault "${vault}"`,
+        `Created/updated item "${item}" in vault "${vault}"`,
         `Item ID: ${data.item_id}`,
         '',
         'op:// references (use these in extra.env):',
         ...Object.entries(data.refs).map(([field, ref]) => `  ${field}=${ref}`),
+        '',
+        provisionerNote,
       ];
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }

@@ -1,6 +1,16 @@
+export interface ProviderStatus {
+  name: string;
+  type?: string; // "connect_server" | "service_account"
+  status: string;
+  latency_ms?: number;
+  error?: string;
+  rate_limited_since?: string;
+}
+
 export interface HealthResponse {
   status: string;
-  providers: Array<{ name: string; status: string; latency_ms?: number; error?: string }>;
+  provisioner?: string; // "connect" | "sdk" — absent if unavailable
+  providers: ProviderStatus[];
   uptime_seconds: number;
 }
 
